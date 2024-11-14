@@ -60,6 +60,8 @@ wifi:
     password: <your AP password>
 ```
 
+其中`api.encryption.key`的配置可以使用[官方文档](https://esphome.io/components/api.html#configuration-variables)中所给出随机生成的密钥；`ota.password`与`wifi.ap.password`可以任意配置一个自己喜欢的密码；`wifi.ssid`与`wifi.password`根据实际情况填写即可。
+
 4. 生成工程并尝试编译
 
 ```
