@@ -1,0 +1,478 @@
+esphome:
+  name: ir-controller
+  libraries:
+    - IRremoteESP8266
+#  includes:
+#    - .esphome/build/ir-controller/.piolibdeps/ir-controller/IRremoteESP8266/src/IRremoteESP8266.h
+#    - .esphome/build/ir-controller/.piolibdeps/ir-controller/IRremoteESP8266/src/ir_Kelvinator.h
+#    - .esphome/build/ir-controller/.piolibdeps/ir-controller/IRremoteESP8266/src/IRsend.h
+#    - .esphome/build/ir-controller/.piolibdeps/ir-controller/IRremoteESP8266/src/IRrecv.h
+#    - .esphome/build/ir-controller/.piolibdeps/ir-controller/IRremoteESP8266/src/IRac.h
+  on_boot:
+    priority: -100
+    then:
+      - lambda: |-
+          id(ac) = new IRKelvinatorAC(id(ir_send_pin));
+          id(ac)->begin();
+          id(ac)->setFan(id(ac_fan_speed).state);
+          auto index = id(ac_mode).active_index();
+          if (index.has_value()) id(ac)->setMode(index.value());
+          id(ac)->setTemp(id(ac_temp).state);
+          index = id(ac_swing_vertical).active_index();
+          if (index.has_value()) {
+            if (id(ac_swing_vertical).state == "auto" ||
+                id(ac_swing_vertical).state == "LowAuto" ||
+                id(ac_swing_vertical).state == "MiddleAuto") {
+              id(ac)->setSwingVertical(true, index.value());
+            } else if (id(ac_swing_vertical).state == "HighAuto") {
+              id(ac)->setSwingVertical(true, index.value() + 1);
+            } else {
+              id(ac)->setSwingVertical(false, index.value());
+            }
+          }
+          id(ac)->setSwingHorizontal(id(ac_swing_horizontal).state);
+          id(ac)->setXFan(id(ac_xfan).state);
+          id(ac)->setIonFilter(id(ac_ion_filter).state);
+          id(ac)->setLight(id(ac_light).state);
+          id(ac)->setQuiet(id(ac_quiet).state);
+          id(ac)->setIonFilter(id(ac_turbo).state);
+
+          id(irrecv) = new IRrecv(id(ir_recv_pin), id(ir_recv_buf_size), 
+                                    id(ir_recv_timeout), true);
+          id(irrecv)->setUnknownThreshold(id(ir_recv_ignore));
+          id(irrecv)->setTolerance(id(ir_recv_tolerance));
+          id(irrecv)->enableIRIn();
+  on_shutdown:
+    priority: 700
+    then:
+      - lambda: |-
+          delete id(ac);
+
+web_server:
+  port: 80
+  version: 3
+
+esp8266:
+  board: esp_wroom_02
+
+# Enable logging
+logger:
+  level: INFO
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: <your key>
+
+ota:
+  - platform: esphome
+    password: <your OTA password>
+
+wifi:
+  ssid: <your SSID>
+  password: <your WiFi password>
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Ir-Controller Fallback Hotspot"
+    password: <your AP password>
+
+captive_portal:
+
+status_led:
+  pin: 15
+
+globals:
+  - id: ir_send_pin
+    type: const uint16_t
+    restore_value: no
+    initial_value: "14"
+  - id: ir_recv_pin
+    type: const uint16_t
+    restore_value: no
+    initial_value: "5"
+  - id: ac
+    type: IRKelvinatorAC *
+    restore_value: no
+    initial_value: "NULL"
+  - id: ac_off_time
+    type: ESPTime
+    restore_value: no
+    initial_value: "{0}"
+  - id: ir_recv_buf_size
+    type: uint16_t
+    restore_value: no
+    initial_value: "1024"
+  - id: ir_recv_timeout
+    type: uint8_t
+    restore_value: no
+    initial_value: "50"
+  - id: ir_recv_ignore
+    type: uint16_t
+    restore_value: no
+    initial_value: "12"
+  - id: ir_recv_tolerance
+    type: uint8_t
+    restore_value: no
+    initial_value: "25"
+  - id: irrecv
+    type: IRrecv *
+    restore_value: no
+    initial_value: "NULL"
+
+binary_sensor:
+  - platform: gpio
+    id: ir_dump_pin
+    name: "IR dump"
+    icon: "mdi:record-rec"
+    pin:
+      number: 4
+      inverted: true
+      mode:
+        input: true
+        pullup: true
+    filters:
+      - delayed_on: 10ms
+    web_server:
+      sorting_weight: 12
+
+interval:
+  - interval: 100ms
+    then:
+      - lambda: |-
+          decode_results results;
+          if (id(ir_dump_pin).state && id(irrecv)->decode(&results)) {
+            if (results.overflow) ESP_LOGW("ir_dump", "Buffer is full");
+            ESP_LOGI("ir_dump", "%s", resultToTimingInfo(&results).c_str());
+          }
+
+event:
+  - platform: template
+    event_types:
+      - "ac_conf_change"
+    name: "Apply AC configuration"
+    id: ac_apply_event
+    internal: true
+    on_event:
+      then:
+        - lambda: |-
+            if (id(ac) && id(ac_power).state) id(ac)->send();
+
+switch:
+  - platform: template
+    id: ac_power
+    name: "Power"
+    icon: "mdi:car-defrost-rear"
+    web_server:
+      sorting_weight: 0
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    turn_on_action:
+      - lambda: |-
+          if (id(ac)) {
+            id(ac)->on();
+            id(ac)->send();
+            ESP_LOGI("ac_power", "Configurations: %s", id(ac)->toString().c_str());
+          }
+    turn_off_action:
+      - lambda: |-
+          if (id(ac)) {
+            id(ac)->off();
+            id(ac)->send();
+            auto call = id(ac_timed_off).make_call();
+            call.set_time("00:00:00");
+            call.perform();
+          }
+  - platform: template
+    id: ac_swing_horizontal
+    name: "Horizontal swing"
+    icon: "mdi:swap-horizontal-bold"
+    web_server:
+      sorting_weight: 5
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    turn_on_action:
+      - lambda: |-
+          if (id(ac)) {
+            id(ac)->setSwingHorizontal(true);
+            id(ac_apply_event).trigger("ac_conf_change");
+          }
+    turn_off_action:
+      - lambda: |-
+          if (id(ac)) {
+            id(ac)->setSwingHorizontal(false);
+            id(ac_apply_event).trigger("ac_conf_change");
+          }
+  - platform: template
+    id: ac_xfan
+    name: "XFan"
+    icon: "mdi:radiator"
+    web_server:
+      sorting_weight: 10
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    turn_on_action:
+      - lambda: |-
+          if (id(ac)) {
+            id(ac)->setXFan(true);
+            id(ac_apply_event).trigger("ac_conf_change");
+          }
+    turn_off_action:
+      - lambda: |-
+          if (id(ac)) {
+            id(ac)->setXFan(false);
+            id(ac_apply_event).trigger("ac_conf_change");
+          }
+  - platform: template
+    id: ac_ion_filter
+    name: "Ion filter"
+    icon: "mdi:electron-framework"
+    web_server:
+      sorting_weight: 11
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    turn_on_action:
+      - lambda: |-
+          if (id(ac)) {
+            id(ac)->setIonFilter(true);
+            id(ac_apply_event).trigger("ac_conf_change");
+          }
+    turn_off_action:
+      - lambda: |-
+          if (id(ac)) {
+            id(ac)->setIonFilter(false);
+            id(ac_apply_event).trigger("ac_conf_change");
+          }
+  - platform: template
+    id: ac_light
+    name: "Light"
+    icon: "mdi:brightness-6"
+    web_server:
+      sorting_weight: 7
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    turn_on_action:
+      - lambda: |-
+          if (id(ac)) {
+            id(ac)->setLight(true);
+            id(ac_apply_event).trigger("ac_conf_change");
+          }
+    turn_off_action:
+      - lambda: |-
+          if (id(ac)) {
+            id(ac)->setLight(false);
+            id(ac_apply_event).trigger("ac_conf_change");
+          }
+  - platform: template
+    id: ac_quiet
+    name: "Quiet"
+    icon: "mdi:volume-off"
+    web_server:
+      sorting_weight: 8
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    turn_on_action:
+      - lambda: |-
+          if (id(ac)) {
+            id(ac)->setQuiet(true);
+            id(ac_apply_event).trigger("ac_conf_change");
+          }
+    turn_off_action:
+      - lambda: |-
+          if (id(ac)) {
+            id(ac)->setQuiet(false);
+            id(ac_apply_event).trigger("ac_conf_change");
+          }
+  - platform: template
+    id: ac_turbo
+    name: "Turbo"
+    icon: "mdi:speedometer"
+    web_server:
+      sorting_weight: 9
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    turn_on_action:
+      - lambda: |-
+          if (id(ac)) {
+            id(ac)->setTurbo(true);
+            id(ac_apply_event).trigger("ac_conf_change");
+          }
+    turn_off_action:
+      - lambda: |-
+          if (id(ac)) {
+            id(ac)->setTurbo(false);
+            id(ac_apply_event).trigger("ac_conf_change");
+          }
+
+number:
+  - platform: template
+    id: ac_fan_speed
+    name: "Fan speed"
+    icon: "mdi:fan"
+    min_value: 1
+    max_value: 5
+    step: 1
+    web_server:
+      sorting_weight: 4
+    optimistic: true
+    restore_value: true
+    on_value:
+      then:
+        lambda: |-
+          if (id(ac)) {
+            id(ac)->setFan(id(ac_fan_speed).state);
+            id(ac_apply_event).trigger("ac_conf_change");
+          }
+  - platform: template
+    id: ac_temp
+    name: "Temperatrue"
+    icon: "mdi:thermometer"
+    min_value: 16
+    max_value: 30
+    step: 1
+    web_server:
+      sorting_weight: 3
+    optimistic: true
+    restore_value: true
+    on_value:
+      then:
+        lambda: |-
+          if (id(ac)) {
+            id(ac)->setTemp(id(ac_temp).state);
+            id(ac_apply_event).trigger("ac_conf_change");
+          }
+
+select:
+  - platform: template
+    id: ac_mode
+    name: "Mode"
+    icon: "mdi:order-bool-ascending-variant"
+    options:
+     - "Auto"
+     - "Cool"
+     - "Dry"
+     - "Fan"
+     - "Heat"
+    initial_option: "Auto"
+    web_server:
+      sorting_weight: 2
+    optimistic: true
+    restore_value: true
+    on_value:
+      then:
+        lambda: |-
+          if (id(ac)) {
+            auto index = id(ac_mode).active_index();
+            if (index.has_value()) {
+              id(ac)->setMode(index.value());
+              id(ac_apply_event).trigger("ac_conf_change");
+            }
+          }
+  - platform: template
+    id: ac_swing_vertical
+    name: "Vertical swing"
+    icon: "mdi:swap-vertical-bold"
+    options:
+     - "Off"
+     - "Auto"
+     - "Highest"
+     - "UpperMiddle"
+     - "Middle"
+     - "LowerMiddle"
+     - "Lowest"
+     - "LowAuto"
+     - "MiddleAuto"
+     - "HighAuto"
+    initial_option: "Auto"
+    web_server:
+      sorting_weight: 6
+    optimistic: true
+    restore_value: true
+    on_value:
+      then:
+        lambda: |-
+          if (id(ac)) {
+            auto index = id(ac_swing_vertical).active_index();
+            if (index.has_value()) {
+              if (id(ac_swing_vertical).state == "auto" ||
+                  id(ac_swing_vertical).state == "LowAuto" ||
+                  id(ac_swing_vertical).state == "MiddleAuto") {
+                id(ac)->setSwingVertical(true, index.value());
+              } else if (id(ac_swing_vertical).state == "HighAuto") {
+                id(ac)->setSwingVertical(true, index.value() + 1);
+              } else {
+                id(ac)->setSwingVertical(false, index.value());
+              }
+              id(ac_apply_event).trigger("ac_conf_change");
+            }
+          }
+
+time:
+  - platform: sntp
+    id: sntp_time
+    timezone: Asia/Shanghai
+    servers:
+     - ntp.ntsc.ac.cn
+     - ntp.aliyun.com
+     - time.windows.com
+    on_time:
+      - seconds: 0
+        minutes: /1
+        then:
+          lambda: |-
+            if (id(ac) && id(ac_off_time).is_valid() &&
+                id(sntp_time).now() >= id(ac_off_time)) {
+              if (id(ac_power).state) {
+                id(ac_power).turn_off();
+                ESP_LOGI("sntp_time", "[%s] A/C powered off", 
+                  id(sntp_time).now().strftime("%m-%d %H:%M:%S").c_str());
+              }
+              auto call = id(ac_timed_off).make_call();
+              call.set_time("00:00:00");
+              call.perform();
+            }
+
+datetime:
+  - platform: template
+    id: ac_timed_off
+    name: "Timed off"
+    icon: "mdi:calendar-alert"
+    type: time
+    initial_value: "00:00:00"
+    web_server:
+      sorting_weight: 1
+    optimistic: yes
+    disabled_by_default: true
+    on_value:
+      then:
+        - lambda: |-
+            ESPTime time_set = id(ac_timed_off).state_as_esptime();
+            if (id(sntp_time).now().is_valid()) {
+              if (time_set.hour != 0 || time_set.minute != 0) {
+                id(ac_off_time) = id(sntp_time).now();
+                id(ac_off_time).hour += time_set.hour;
+                id(ac_off_time).minute += time_set.minute;
+                id(ac_off_time).second = 0;
+                if (id(ac_off_time).minute > 59) {
+                  id(ac_off_time).hour += 1;
+                  id(ac_off_time).minute -= 59;
+                }
+                if (id(ac_off_time).hour > 23) {
+                  id(ac_off_time).day_of_month += 1;
+                  id(ac_off_time).hour -= 23;
+                }
+                id(ac_off_time).recalc_timestamp_local(false);
+                ESP_LOGI("ac_timed_off", "[%s] Turn off at %s", 
+                  id(sntp_time).now().strftime("%m-%d %H:%M:%S").c_str(),
+                  id(ac_off_time).strftime("%m-%d %H:%M:%S").c_str());
+              } else {
+                id(ac_off_time).year = 0;
+                id(ac_off_time).month = 0;
+                id(ac_off_time).day_of_month = 0;
+                id(ac_off_time).hour = 0;
+                id(ac_off_time).minute = 0;
+                id(ac_off_time).second = 0;
+                id(ac_off_time).recalc_timestamp_local(false);
+              }
+            } else
+              ESP_LOGW("ac_timed_off", "SNTP not finished yet.");
