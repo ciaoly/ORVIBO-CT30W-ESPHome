@@ -1,4 +1,6 @@
-# 基于ORVIBO CT30W的红外遥控器
+![logo](./assets/logo.png)
+
+ 基于ORVIBO CT30W的红外遥控器
 
 ## 功能特性
 
@@ -28,6 +30,12 @@
 - 当警告处于活动状态时，缓慢闪烁（大约每秒一次）；
 - 当出现错误时，快速闪烁（每秒多次）；
 - 其他情况保持关闭。
+
+## Web UI
+
+![Web UI](./assets/web-ui.png)
+
+在设备成功启动并接入WiFi后，在浏览器中打开`http://<IP Address>`即可访问Web UI，在上图的`Sensor and Control`面板中即可实现对空调的红外遥控。
 
 ## 如何使用
 
