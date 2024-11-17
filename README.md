@@ -1,6 +1,6 @@
 ![logo](./assets/logo.png)
 
- 基于ORVIBO CT30W的红外遥控器
+# 基于ORVIBO CT30W的ESPHome空调红外遥控器
 
 ## 功能特性
 
