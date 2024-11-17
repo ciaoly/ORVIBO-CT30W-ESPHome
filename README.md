@@ -19,6 +19,7 @@
     - 灯光开关
     - 离子过滤
     - XFan模式
+- 配置断电保存
 - 支持红外接收
 - 具有系统状态指示灯
 - 提供Web UI与接入Home Assistant以及其他ESPHome所支持的功能
@@ -73,7 +74,7 @@ wifi:
 4. 生成工程并尝试编译
 
 ```
-esphome run ir-controller.yaml
+esphome compile ir-controller.yaml
 ```
 
 :warning: **注意**：这次编译由于缺少头文件将会**报错**属于正常情况。
