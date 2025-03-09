@@ -219,18 +219,12 @@ switch:
           address: 0x00ff
           command: !lambda 'return 0xfe01 - id(reverse_flag);'
           command_repeats: 1
-      - lambda: |-
-          ESP_LOGI("switch1 on", "command = %d, reverse_flag = %d", 
-            0xf609 + id(reverse_flag), id(reverse_flag));
     turn_off_action:
       - remote_transmitter.transmit_nec:
           transmitter_id: ir_transmitter
           address: 0x00ff
           command: !lambda 'return 0xf609 + id(reverse_flag);'
           command_repeats: 1
-      - lambda: |-
-          ESP_LOGI("switch1 off", "command = %d, reverse_flag = %d", 
-            0xfe01 - id(reverse_flag), id(reverse_flag));
 
   - platform: template
     id: reverse_switch
