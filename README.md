@@ -1,30 +1,19 @@
 ![logo](./assets/logo.png)
 
-# 基于ORVIBO CT30W的ESPHome空调红外遥控器
+# 基于ORVIBO CT30W的ESPHome万能遥控器
 
 ## 功能特性
 
-本项目基于ORVIBO CT30W，通过修改固件的方式刷入ESPHome，实现支持格力(Gree)`Kelvinator`协议的红外遥控器，支持如下功能：
+本项目基于ORVIBO CT30W并进行了电路上的修改，通过修改固件的方式刷入ESPHome，实现支持红外和射频的遥控器，但是功能比较简陋, 如需订制请自己修改代码.
 
-- 作为红外遥控空调
-    - 开关空调
-    - 定时关机
-    - 模式选择（自动、制冷、干燥、通风、制热）
-    - 温度调整（16℃~25℃）
-    - 风速调整（1~5）
-    - 水平扫风
-    - 垂直扫风（固定位置以及自动扫动）
-    - 静音模式
-    - 强力模式
-    - 灯光开关
-    - 离子过滤
-    - XFan模式
-- 配置断电保存
-- 支持红外接收
-- 具有系统状态指示灯
-- 提供Web UI与接入Home Assistant以及其他ESPHome所支持的功能
+本仓库中的代码支持三款拼多多上的开灯器, 其中有两个433MHz射频的和一个红外的. 至于购买链接就不放了, 因为买来了也没法和我的代码通用.
 
-其中红外接收功能主要是用来实现学码功能，使用此功能首先需要打开Web UI，然后**按住**设备边缘的按键，用其他的红外遥控器对准设备按下想要学码的按键，这样就可以在Web UI的日志中看到接收到的数据，之后如何将获取到的红外数据应用到设备中请参考[这个文档](https://github.com/crankyoldgit/IRremoteESP8266/wiki/Adding-support-for-a-new-AC-protocol#a-note-on-collecting-data)自行尝试。
+可以参考我写的几篇文章来订制自己的遥控器: 
+
+* [利用欧瑞博CT30W实现廉价版的开关灯机器人](https://blog.chaol.top/archives/97.html)
+* [改装遥控器](https://blog.chaol.top/archives/99-1.html)
+* [分析射频信号](https://blog.chaol.top/archives/99.html)
+* [分析红外信号](https://blog.chaol.top/archives/100.html)
 
 另外对于系统状态指示灯关联了所有ESPHome组件，可以指示设备的状态，灯光的含义如下：
 
@@ -36,76 +25,27 @@
 
 ![Web UI](./assets/web-ui.png)
 
-在设备成功启动并接入WiFi后，在浏览器中打开`http://<IP Address>`即可访问Web UI，在上图的`Sensor and Control`面板中即可实现对空调的红外遥控。
+在设备成功启动并接入WiFi后，在浏览器中打开`http://<IP Address>`即可访问Web UI。
 
 ## 如何使用
 
-1. 参照[官方文档](https://esphome.io/guides/installing_esphome)完成ESPHome的安装；
-2. 将此仓库拉取到本地：
+1. 参照[改装遥控器说明](https://blog.chaol.top/archives/99-1.html), 焊接上射频模块
+2. 参照[官方文档](https://esphome.io/guides/installing_esphome)完成ESPHome的安装；
+3. 将此仓库拉取到本地：
 
 ```
-git clone https://github.com/CCBP/ORVIBO-CT30W-ESPHome.git
+git clone https://github.com/ciaoly/ORVIBO-CT30W-ESPHome.git
 ```
 
-3. 打开配置文件`ir-controller.yaml`，根据实际情况修改下方配置：
+3. 重命名配置文件`secrets.yaml.example`为`secrets.yaml`，根据实际情况修改配置
 
-```
-# Enable Home Assistant API
-api:
-  encryption:
-    key: <your key>
-
-ota:
-  - platform: esphome
-    password: <your password>
-
-wifi:
-  ssid: <your SSID>
-  password: <your WiFi password>
-
-  # Enable fallback hotspot (captive portal) in case wifi connection fails
-  ap:
-    ssid: "Ir-Controller Fallback Hotspot"
-    password: <your AP password>
-```
-
-其中`api.encryption.key`的配置可以使用[官方文档](https://esphome.io/components/api.html#configuration-variables)中所给出随机生成的密钥；`ota.password`与`wifi.ap.password`可以任意配置一个自己喜欢的密码；`wifi.ssid`与`wifi.password`根据实际情况填写即可。
+其中`api_encryption_key`的配置可以使用[官方文档](https://esphome.io/components/api.html#configuration-variables)中所给出随机生成的密钥；`ota_passwd`与`wifi_ap_passwd`可以任意配置一个自己喜欢的密码；`wifi_ssid`与`wifi_passwd`根据实际情况填写即可。
 
 4. 生成工程并尝试编译
 
 ```
-esphome compile ir-controller.yaml
+esphome compile ir_controller.yaml
 ```
-
-:warning: **注意**：这次编译由于缺少头文件将会**报错**属于正常情况。
-
-5. 添加头文件
-
-为了实现红外收发功能，需要包含`IRremoteESP8266`库中的一些头文件`IRremoteESP8266.h`、`ir_Kelvinator.h`、`IRsend.h`、`IRrecv.h`和`IRac.h`，为此修改`ir-controller.yaml`如下（头文件所在路径可能需要根据实际情况修改）：
-
-```
-esphome:
-  name: ir-controller
-  libraries:
-    - IRremoteESP8266
-  includes:
-    - .esphome/build/ir-controller/.piolibdeps/ir-controller/IRremoteESP8266/src/IRremoteESP8266.h
-    - .esphome/build/ir-controller/.piolibdeps/ir-controller/IRremoteESP8266/src/ir_Kelvinator.h
-    - .esphome/build/ir-controller/.piolibdeps/ir-controller/IRremoteESP8266/src/IRsend.h
-    - .esphome/build/ir-controller/.piolibdeps/ir-controller/IRremoteESP8266/src/IRrecv.h
-    - .esphome/build/ir-controller/.piolibdeps/ir-controller/IRremoteESP8266/src/IRac.h
-```
-
-由于ESPHome在生成cpp代码时会将`includes`组件放在`globals`组件之后，这导致声明在`globals`中`IRremoteESP5266`的自定义变量将会缺失，因此需要手动修改`.esphome/build/ir-controller/src/main.cpp`，补充头文件在`main.cpp`的**最开始**（注意要**放在自动生成代码之外**）。
-
-```
-#include "ir_Kelvinator.h"
-#include "IRrecv.h"
-// Auto generated code by esphome
-// ========== AUTO GENERATED INCLUDE BLOCK BEGIN ===========
-```
-
-:question: 对于头文件的操作极为别扭，但我一番搜索下来并未发现优雅的解决办法，如果谁有更好的解决方案还望指教~
 
 6. 连接USB转TTL串口模块
 
@@ -152,16 +92,17 @@ esphome run ir-controller.yaml
 
 ## 自定义
 
-本项目基于ORVIBO CT30W开发，因此所用引脚均根据CT30W中的硬件连接所定，但理论上只要是ESP8266都可以使用此项目。并且由于我家中的设备是格力的空调设备，所以本项目仅适配了其对应的`Kelvinator`协议，但理论上`IRremoteESP8266`库中列出[支持的IR协议](https://github.com/crankyoldgit/IRremoteESP8266/blob/master/SupportedProtocols.md)都是可以修改此项目进行适配的，但是因为IR协议众多并且我也没有对应的设备测试，所以这里不再进行描述，如果有问题欢迎提issue与我交流。
+本项目基于ORVIBO CT30W开发，因此所用引脚均根据CT30W中的硬件连接所定，但理论上只要是ESP8266都可以使用此项目。理论上`IRremoteESP8266`库中列出[支持的IR协议](https://github.com/crankyoldgit/IRremoteESP8266/blob/master/SupportedProtocols.md)都是可以修改此项目进行适配的，但是因为IR协议众多并且我也没有对应的设备测试，所以这里不再进行描述，如果有问题欢迎提issue与我交流。
 
 ### 引脚修改
 
-本项目所使用的4个引脚的功能机修改位置如下：
+本项目所使用的5个引脚的功能机修改位置如下：
 
 - `GPIO14`：输出，用于控制红外发射二极管，即实现红外遥控的功能，修改`globals`组件`id`为`ir_send_pin`的`initial_value`的值即可；
 - `GPIO5`：输入，用于读取红外接收二极管的电平，实现学码的功能，修改`globals`组件`id`为`ir_recv_pin`的`initial_value`的值即可；
 - `GPIO4`：输入，用于读取按键电平，仅当按键按下时才开启红外接收功能，修改`binary_sensor`组件`pin`中的`number`的值即可；
 - `GPIO15`：输出，用于控制LED状态，指示当前系统状态，修改`status_led`组件的`pin`的值即可。
+- `GPIO13`: 输出, 连接射频模块
 
 # 参考
 
@@ -169,3 +110,4 @@ esphome run ir-controller.yaml
 - https://esphome.io/guides/getting_started_command_line
 - https://www.bilibili.com/opus/967982171394408465?jump_opus=1
 - https://github.com/web1n/ORVIBO-CT30W
+- https://www.amrzs.net/2024/11/17/orvibo_ct30w_esphome/
