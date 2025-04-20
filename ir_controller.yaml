@@ -73,6 +73,7 @@ remote_receiver:
     #unknown_threshold: 12
     idle: 10ms
     dump: all
+    buffer_size: 2kb
 
     # 当接收到信号时触发处理
     # on_value:
@@ -198,6 +199,26 @@ button:
           code: '011111000101101001100100'
           repeat:
             times: 15
+            wait_time: 0ms
+          protocol: 
+            #The pulse length of the protocol - how many microseconds one pulse should last for.
+            pulse_length: 200
+
+  - platform: template
+    name: Send RC3
+    id: send_rc3
+    # friendly_name : 射频开关3
+    # Optional variables:
+    icon: "mdi:radio-tower"
+    web_server:
+      sorting_weight: 2
+      sorting_group_id: sorting_group_button
+    on_press:
+      - remote_transmitter.transmit_rc_switch_raw:
+          transmitter_id: rc_transmitter
+          code: '110101101110100001100100'
+          repeat:
+            times: 12
             wait_time: 0ms
           protocol: 
             #The pulse length of the protocol - how many microseconds one pulse should last for.
